@@ -1,0 +1,8 @@
+.env
+pyvenv.cfg
+.ruff-cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

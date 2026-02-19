@@ -1,0 +1,6 @@
+Flask==3.1.2
+docx2txt==0.9
+pypdf==6.7.1
+PyPDF2==3.0.1
+openpyxl==3.1.5
+azure-storage-blob==12.28.0
