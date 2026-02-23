@@ -1,33 +1,47 @@
 import json
 from openpyxl import load_workbook
-from flask import Blueprint, jsonify, request
+from flask import jsonify, request
 
+from app.logging_config import get_logger
 from app.services.document_service import DocumentService
 from app.utils.file_validator import validate_file
 
-document_bp = Blueprint("documents", __name__, url_prefix="/api/documents")
-
 service = DocumentService()
+logger = get_logger(__name__)
 
 
-@document_bp.route("", methods=["POST"])
 def upload_document():
+    logger.info("Upload request received")
     file = request.files.get("file")
     if not file:
+        logger.warning("Upload request rejected: missing file part 'file'")
         return jsonify({"error": "No file provided"}), 400
 
     try:
         validate_file(file)
     except ValueError as e:
+        logger.warning("Upload request rejected: validation failed (%s)", str(e))
         return jsonify({"error": str(e)}), 400
 
-    result = service.process_upload(file.stream, file.filename)
+    try:
+        result = service.process_upload(file.stream, file.filename)
+    except ValueError as e:
+        logger.warning("Upload request rejected by service: %s", str(e))
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        logger.exception("Upload request failed due to an unexpected server error")
+        return jsonify({"error": "Internal server error"}), 500
+    logger.info(
+        "Upload request completed: filename='%s', document_id='%s'",
+        file.filename,
+        result.id,
+    )
     return jsonify(result.__dict__), 201
 
 
-@document_bp.route("/excel", methods=["GET"])
 def get_excel():
     try:
+        logger.info("Excel fetch request received")
         stream = service.get_excel_stream()
         # parse workbook in-memory and return structured JSON for all entries
 
@@ -98,6 +112,14 @@ def get_excel():
 
             entries.append(entry)
 
+        logger.info(
+            "Excel fetch request completed successfully: returned_entries=%d",
+            len(entries),
+        )
         return jsonify({"data": entries}), 200
     except FileNotFoundError:
+        logger.warning("Excel fetch request failed: workbook file not found")
         return jsonify({"error": "Excel file not found"}), 404
+    except Exception:
+        logger.exception("Excel fetch request failed due to an unexpected server error")
+        return jsonify({"error": "Internal server error"}), 500

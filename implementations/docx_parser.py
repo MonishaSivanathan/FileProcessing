@@ -4,10 +4,14 @@ import re
 import docx2txt
 
 from app.interfaces.parser_interface import IParser
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class DocxParser(IParser):
     def parse(self, data: bytes) -> str:
+        logger.info("DOCX parsing started: payload_bytes=%d", len(data) if data else 0)
         # docx2txt works with file path, so write to temp file
         import tempfile
 
@@ -20,6 +24,7 @@ class DocxParser(IParser):
         # If the entire doc is JSON, return it prettified
         try:
             parsed = json.loads(txt)
+            logger.info("DOCX parsing completed using full-document JSON detection")
             return json.dumps(parsed, indent=2)
         except Exception:
             pass
@@ -27,6 +32,7 @@ class DocxParser(IParser):
         # Split into non-empty lines
         lines = [l.rstrip() for l in txt.splitlines() if l.strip()]
         if not lines:
+            logger.info("DOCX parsing completed: no non-empty lines extracted")
             return json.dumps({"content": txt}, indent=2)
 
         # Find a header line within the first 5 lines by detecting delimiters
@@ -165,6 +171,8 @@ class DocxParser(IParser):
                     records.append({k.strip(): v.strip()})
 
         if records:
+            logger.info("DOCX parsing completed: extracted_records=%d", len(records))
             return "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
 
+        logger.info("DOCX parsing completed with fallback: returning raw content payload")
         return json.dumps({"content": txt}, indent=2)

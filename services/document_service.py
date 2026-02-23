@@ -8,6 +8,9 @@ from app.implementations.excel_repository import ExcelRepository
 from app.implementations.pdf_parser import PdfParser
 from app.interfaces.excel_interface import IExcelRepository
 from app.interfaces.storage_interface import IStorage
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -26,6 +29,7 @@ class DocumentService:
             "docx": DocxParser(),
             "pdf": PdfParser(),
         }
+        logger.info("DocumentService initialized: available_parsers=%s", list(self.parsers))
 
     def _consolidate_fragments(self, ndjson_str: str) -> str:
         """Consolidate fragmented JSON lines into complete records."""
@@ -107,10 +111,21 @@ class DocumentService:
     def process_upload(self, file_stream, filename) -> UploadResult:
         # validation assumed done upstream
         ext = filename.rsplit(".", 1)[-1].lower()
+        logger.info(
+            "Upload processing started: filename='%s', extension='%s'",
+            filename,
+            ext,
+        )
         content = file_stream.read()
         blob_name = f"{uuid.uuid4()}.{ext}"
         url = self.storage.save(blob_name, content)
         parser = self.parsers.get(ext)
+        if not parser:
+            logger.error(
+                "Upload processing failed: unsupported file extension='%s'",
+                ext,
+            )
+            raise ValueError(f"Unsupported file extension: {ext}")
         json_data = parser.parse(content)
         # consolidate fragmented lines if needed
         json_data = self._consolidate_fragments(json_data)
@@ -122,7 +137,13 @@ class DocumentService:
                 "json_data": json_data,
             }
         )
+        logger.info(
+            "Upload processing completed: blob_id='%s', excel_row=%s",
+            blob_name,
+            row,
+        )
         return UploadResult(id=blob_name, blob_url=url, excel_row=row)
 
     def get_excel_stream(self):
+        logger.info("Excel stream retrieval started")
         return self.excel_repo.get_stream()
